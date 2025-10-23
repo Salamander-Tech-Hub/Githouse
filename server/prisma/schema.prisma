@@ -1,0 +1,199 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+// Enums
+enum UserRole {
+  user
+  project_author
+  maintainer
+  community_manager
+  admin
+}
+
+enum UserStatus {
+  active
+  suspended
+  pending
+}
+
+enum CommunityVisibility {
+  public
+  private
+  restricted
+}
+
+enum MembershipRole {
+  member
+  moderator
+  admin
+  owner
+}
+
+enum ActivityType {
+  post
+  comment
+  follow
+  unfollow
+  join_community
+  leave_community
+  like
+  unlike
+  report
+  moderation_action
+  other
+}
+
+enum ReportStatus {
+  open
+  in_review
+  resolved
+  dismissed
+}
+
+enum ModerationAction {
+  none
+  warn
+  suspend
+  ban
+  note
+}
+
+enum NotificationType {
+  follow
+  mention
+  community_invite
+  report_update
+  moderator_message
+  system
+}
+
+model User {
+  id            String   @id @default(uuid())
+  name          String
+  handle        String   @unique
+  email         String?  @unique
+  avatarUrl     String?
+  role          UserRole @default(user)
+  status        UserStatus @default(active)
+  bio           String?
+  location      String?
+  settings      Json?    @default("{}")
+  lastActivityAt DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  communities   Community[] @relation("CommunityOwner")
+  memberships   CommunityMembership[]
+  following     Follow[] @relation("follower_rel")
+  followers     Follow[] @relation("followee_rel")
+  activities    Activity[]
+  reportsFiled  Report[] @relation("reporter")
+  reportsAgainst Report[] @relation("reported")
+  moderationLogs ModerationLog[]
+  notifications Notification[]
+}
+
+model Community {
+  id          String   @id @default(uuid())
+  name        String
+  slug        String   @unique
+  description String?
+  imageUrl    String?
+  visibility  CommunityVisibility @default(public)
+  ownerId     String? 
+  owner       User?    @relation("CommunityOwner", fields: [ownerId], references: [id])
+  memberCount Int      @default(0)
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  memberships CommunityMembership[]
+  reports     Report[]
+}
+
+model CommunityMembership {
+  id          String   @id @default(uuid())
+  community   Community @relation(fields: [communityId], references: [id])
+  communityId String
+  user        User     @relation(fields: [userId], references: [id])
+  userId      String
+  role        MembershipRole @default(member)
+  joinedAt    DateTime @default(now())
+  isApproved  Boolean  @default(true)
+  isBanned    Boolean  @default(false)
+
+  @@unique([communityId, userId])
+}
+
+model Follow {
+  followerId String
+  followeeId String
+  createdAt DateTime @default(now())
+
+  follower User @relation("follower_rel", fields: [followerId], references: [id])
+  followee User @relation("followee_rel", fields: [followeeId], references: [id])
+
+  @@id([followerId, followeeId])
+}
+
+model Activity {
+  id String @id @default(uuid())
+  user   User? @relation(fields: [userId], references: [id])
+  userId String?
+  type ActivityType
+  targetType String?
+  targetId   String?
+  metadata   Json? @default("{}")
+  createdAt DateTime @default(now())
+}
+
+model Report {
+  id String @id @default(uuid())
+  reporterId String?
+  reportedUserId String?
+  communityId String?
+  description String?
+  evidence Json? @default("[]")
+  status ReportStatus @default(open)
+  assignedModeratorId String?
+  actionTaken ModerationAction @default(none)
+  actionMetadata Json? @default("{}")
+  createdAt DateTime @default(now())
+  resolvedAt DateTime?
+
+  reporter User? @relation("reporter", fields: [reporterId], references: [id])
+  reported User? @relation("reported", fields: [reportedUserId], references: [id])
+  community Community? @relation(fields: [communityId], references: [id])
+  moderationLogs ModerationLog[]
+}
+
+model ModerationLog {
+  id String @id @default(uuid())
+  reportId String?
+  moderatorId String?
+  action ModerationAction
+  reason String?
+  metadata Json? @default("{}")
+  createdAt DateTime @default(now())
+
+  report Report? @relation(fields: [reportId], references: [id])
+  moderator User? @relation(fields: [moderatorId], references: [id])
+}
+
+model Notification {
+  id String @id @default(uuid())
+  userId String
+  type NotificationType
+  payload Json? @default("{}")
+  isRead Boolean @default(false)
+  createdAt DateTime @default(now())
+  readAt DateTime?
+
+  user User @relation(fields: [userId], references: [id])
+}
